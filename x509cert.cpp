@@ -8,6 +8,7 @@
 //   http://www.cryptopp.com/wiki/PEM_Pack
 ///////////////////////////////////////////////////////////////////////////
 
+#include "asn.h"
 #include "pch.h"
 #include "cryptlib.h"
 #include "secblock.h"
@@ -375,10 +376,10 @@ void RdnValue::BERDecode(BufferedTransformation &bt)
 
 void RdnValue::DEREncode(BufferedTransformation &bt) const
 {
-    CRYPTOPP_UNUSED(bt);
-
-    // TODO: Implement this function
-    throw NotImplemented("RdnValue::DEREncode");
+    DERSequenceEncoder seq(bt);
+    m_oid.DEREncode(seq);
+    DEREncodeTextString(seq, m_value, m_tag);
+    seq.MessageEnd();
 }
 
 bool RdnValue::ValidateTag(byte tag) const
@@ -433,10 +434,7 @@ void DateValue::BERDecode(BufferedTransformation &bt)
 
 void DateValue::DEREncode(BufferedTransformation &bt) const
 {
-    CRYPTOPP_UNUSED(bt);
-
-    // TODO: Implement this function
-    throw NotImplemented("DateValue::DEREncode");
+    DEREncodeDate(bt, m_value, m_tag);
 }
 
 bool DateValue::ValidateTag(byte tag) const
@@ -484,8 +482,13 @@ void ExtensionValue::DEREncode(BufferedTransformation &bt) const
 {
     CRYPTOPP_UNUSED(bt);
 
-    // TODO: Implement this function
-    throw NotImplemented("ExtensionValue::DEREncode");
+    DERSequenceEncoder seq(bt);
+        m_oid.DEREncode(seq);
+        if (m_critical) {
+            DEREncodeUnsigned(seq, m_critical, BOOLEAN);
+        }
+        DEREncodeOctetString(seq, m_value);
+    seq.MessageEnd();
 }
 
 bool ExtensionValue::ValidateTag(byte tag) const
@@ -565,10 +568,21 @@ void KeyIdentifierValue::BERDecode(BufferedTransformation &bt)
 
 void KeyIdentifierValue::DEREncode(BufferedTransformation &bt) const
 {
-    CRYPTOPP_UNUSED(bt);
+    if (m_oid == id_subjectPublicKeyIdentifier) {
+        DEREncodeOctetString(bt, m_value);
+        return;
+    }
 
-    // TODO: Implement this function
-    throw NotImplemented("KeyIdentifierValue::DEREncode");
+    DERSequenceEncoder seq(bt, (CONSTRUCTED | SEQUENCE));
+    if (! m_value.empty()) {
+        DERSequenceEncoder enc(seq, CONTEXT_SPECIFIC|0);
+        enc.Put(ConstBytePtr(m_value), BytePtrSize(m_value));
+        enc.MessageEnd();
+    }
+    if (! m_other.empty()) {
+        seq.Put(ConstBytePtr(m_other), BytePtrSize(m_other));
+    }
+    seq.MessageEnd();
 }
 
 bool KeyIdentifierValue::ValidateTag(byte tag) const
@@ -975,10 +989,14 @@ void BasicConstraintValue::BERDecode(BufferedTransformation &bt)
 
 void BasicConstraintValue::DEREncode(BufferedTransformation &bt) const
 {
-    CRYPTOPP_UNUSED(bt);
-
-    // TODO: Implement this function
-    throw NotImplemented("BasicConstraintValue::DEREncode");
+    DERSequenceEncoder seq(bt);
+      if (m_ca) {
+          DEREncodeUnsigned(seq, m_ca, BOOLEAN);
+      }
+      if (m_pathLen) {
+          DEREncodeUnsigned(seq, m_pathLen, INTEGER);
+      }
+    seq.MessageEnd();
 }
 
 // Null values so some accessors can return something
